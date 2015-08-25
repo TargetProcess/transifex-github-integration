@@ -5,7 +5,7 @@
        "projectSlug":"test",
        "resourceSlug":"test"
    },
-   "gitHub": {
+   "github": {
            "username": "username",
            "apiToken": "token",
            "repo":"repo"

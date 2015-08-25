@@ -1,64 +1,98 @@
-var config = require('./../config/config');
-var github = require('octonode');
-
-var client = github.client({
-    username: config.gitHub.username,
-    password: config.gitHub.password
-});
-var ghrepo = client.repo(`${config.gitHub.username}/${config.gitHub.repo}`);
-
-var getDictionaryFromGithub = function () {
+var _ = require('lodash');
+var fs = require('fs');
+var pathToLocalRepo = 'tmp_repo';
+var git = require('simple-git')(pathToLocalRepo);
+var isClone = true;
+if (!fs.existsSync(pathToLocalRepo)) {
+    fs.mkdirSync(pathToLocalRepo);
+    isClone = false;
+}
+var gitCommand = function (command) {
+    var params = _.toArray(arguments).slice(1);
     return new Promise(function (resolve, reject) {
-        ghrepo.tree('master', true, function (err, res) {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(res.tree.filter(function (node) {
-                    return node.type === 'blob' && node.path !== 'package.json' && node.path.indexOf('.js') !== -1;
-                }).map(function (node) {
-                    return {path: node.path, sha: node.sha}
-                }))
-            }
-        });
-    });
-};
-var updateDictionaryInGithub = function (dict) {
-    return new Promise(function (resolve, reject) {
-        ghrepo.updateContents(dict.path, `update ${dict.lang} file`, dict.content, dict.sha, function (err, res) {
+        var callback = function (err, res) {
             if (err) {
                 reject(err);
             } else {
                 resolve(res);
             }
-        });
+        };
+        git[command].apply(git, params.concat(callback));
     });
 };
-var createDictionaryInGithub = function (dict) {
+var writeDictionary = function (dict) {
+    var dir = `dict/${dict.lang}`;
+    var repoDir = `${pathToLocalRepo}/${dir}`;
+    if (!fs.existsSync(repoDir)) {
+        fs.mkdirSync(repoDir);
+    }
+    var path = `${dir}/${dict.lang}.json`;
     return new Promise(function (resolve, reject) {
-        ghrepo.createContents(`dict/${dict.lang}/${dict.lang}.json`, `create ${dict.lang} file`, dict.content, function (err, res) {
+        fs.writeFile(`${pathToLocalRepo}/${path}`, dict.content, function (err) {
             if (err) {
                 reject(err);
             } else {
-                resolve(res);
+                resolve(path);
             }
         });
     });
 };
-var removeDictionaryInGithub = function (dict) {
-    return new Promise(function (resolve, reject) {
-        ghrepo.deleteContents(dict.path, `remove ${dict.path.match(/\/(\S+-\S+)\.json$/i)[1]} file`, dict.sha, function (err, res) {
-            if (err) {
-                reject(err);
+// {{username:String, password:String, repo: String}} config
+/**
+ *
+ * @param config
+ * @return {{initRepo: Function, addDictionariesToGit: Function, removeDictionariesToGit: Function, getLanguagesFromRepository: Function, updatePackageVersion: Function, initRepo: Function}}
+ */
+module.exports = function (config) {
+    var gitubUrl = `https://${config.username}:${config.password}@github.com/${config.repo}.git`;
+    return {
+        initRepo: function () {
+            var result;
+            if (isClone) {
+                result = gitCommand('fetch', gitubUrl).then(function () {
+                    return gitCommand('pull');
+                });
             } else {
-                resolve(res);
+                result = gitCommand('clone', gitubUrl, '.');
             }
-        });
-    });
-};
 
-module.exports = {
-    getDictionaryFromGithub: getDictionaryFromGithub,
-    updateDictionaryInGithub: updateDictionaryInGithub,
-    createDictionaryInGithub: createDictionaryInGithub,
-    removeDictionaryInGithub: removeDictionaryInGithub
+            return result.then(function () {
+                return git;
+            })
+        },
+        addDictionariesToGit: function (dictionaries) {
+            return Promise.all(dictionaries.map(writeDictionary)).then(function (files) {
+                return gitCommand('add', files);
+            });
+        },
+        removeDictionariesToGit: function (dictionaries) {
+            return dictionaries.map(function (dict) {
+                return gitCommand('rm', `dict/${dict}/${dict}.json`);
+            });
+        },
+        getLanguagesFromRepository: function () {
+            return new Promise(function (resolve, reject) {
+                fs.readdir(`${pathToLocalRepo}/dict/`, function (err, stats) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(stats);
+                    }
+                })
+            });
+
+        },
+        getStatus: function () {
+            return gitCommand('status');
+        },
+        commit: function (message) {
+            return gitCommand('commit', message);
+        },
+        updatePackageVersion: function (langs) {
+            return gitCommand('commit', 'update dictionaries')
+                .then(function () {
+                    return gitCommand('push', gitubUrl, 'master');
+                });
+        }
+    };
 };

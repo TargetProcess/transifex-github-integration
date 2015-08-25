@@ -2,45 +2,47 @@ var https = require('https');
 var fs = require('fs');
 var _ = require('lodash');
 var config = require('./config/config');
-var github = require('./src/github');
-var getTranslatedResources = require('./src/transifex').getTranslatedResources;
-var updateDictionaryInGithub = github.updateDictionaryInGithub;
-var createDictionaryInGithub = github.createDictionaryInGithub;
-var removeDictionaryInGithub = github.removeDictionaryInGithub;
-var getDictionaryFromGithub = github.getDictionaryFromGithub;
-var writeDictionary = function (dict) {
-    return new Promise(function (resolve) {
-        fs.writeFile(`res/${dict.lang}.json`, dict.content, function () {
-            resolve();
-        });
-    });
-};
+var gitRepo = require('./src/github')(config.github);
+var getTranslatedResources = require('tau-transifex')(config.transifex).getTranslatedResources;
 
-Promise.all([getTranslatedResources(), getDictionaryFromGithub()]).then(function (res) {
-    var dictionaryFromTransifex = res[0];
-    var dictionaryFromGitHub = res[1];
-    return dictionaryFromTransifex.reduce(function (memo, file) {
-        var langIsFind = _.find(dictionaryFromGitHub, function (item) {
-            return item.path.includes(`${file.lang}/${file.lang}.json`);
-        });
-        if (langIsFind) {
-            memo.update.push(_.extend({}, langIsFind, file))
-        } else {
-            memo.create.push(file);
-        }
-        memo.remove = dictionaryFromGitHub.filter(function (item) {
-            return !_.find(memo.update, function (file) {
-                return file.path === item.path;
+gitRepo.initRepo()
+    .then(function () {
+        return Promise.all([getTranslatedResources(), gitRepo.getLanguagesFromRepository()])
+    })
+    .then(function (res) {
+        var dictionaryFromTransifex = res[0];
+        var dictionaryFromGitRepository = res[1];
+        return {
+            add: dictionaryFromTransifex,
+            remove: _.difference(dictionaryFromGitRepository, _.pluck(dictionaryFromTransifex, 'lang'))
+        };
+    })
+    .then(function (files) {
+        return Promise.all(
+            _.flatten([
+                gitRepo.addDictionariesToGit(files.add),
+                gitRepo.removeDictionariesToGit(files.remove)
+            ])
+        );
+    }).then(function () {
+        return gitRepo.getStatus();
+    })
+    .then(function (status) {
+        var hasChange = _.reduce(status, function (hasChange, st) {
+            return hasChange || Boolean(st.length);
+        }, false);
+        if (hasChange) {
+            return gitRepo.updatePackageVersion().then(function () {
+                return "Dictionaries were updated"
             });
-        });
-        return memo;
-    }, {create: [], update: [], remove: []});
-}).then(function (files) {
-    var updateFiles = files.update.map(updateDictionaryInGithub);
-    var createFiles = files.create.map(createDictionaryInGithub);
-    var removeFiles = files.remove.map(removeDictionaryInGithub);
-    return Promise.all([updateFiles, createFiles, removeFiles])
-}).catch(function () {
-    console.log(arguments);
-});
+        } else {
+            return "No update";
+        }
+    })
+    .then(function (res) {
+        console.log(res);
+    }).catch(function () {
+        console.log(arguments);
+    });
+
 
