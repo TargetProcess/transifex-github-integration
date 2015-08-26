@@ -22,8 +22,8 @@
   },
   "homepage": "https://github.com/TargetProcess/transifex-github-integaration#readme",
   "dependencies": {
-    "lodash": "^3.10.1",
-    "simple-git": "^1.7.0",
+    "lodash": "3.10.1",
+    "simple-git": "1.8.0",
     "tau-transifex": "0.0.2"
   }
 }

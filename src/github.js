@@ -37,10 +37,29 @@ var writeDictionary = function (dict) {
         });
     });
 };
-// {{username:String, password:String, repo: String}} config
+var updatePackageJson = function (version) {
+    return new Promise(function (resolve, reject) {
+        var path = pathToLocalRepo + '/package.json';
+        fs.readFile(path, function (err, buffer) {
+            if (err) {
+                reject(err);
+            } else {
+                var config = JSON.parse(buffer.toString());
+                config.version = version;
+                fs.writeFile(path, JSON.stringify(config, null, 2), function (err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(version);
+                    }
+                })
+            }
+        })
+    });
+};
 /**
  *
- * @param config
+ * @param {{username:String, password:String, repo: String}} config
  * @return {{initRepo: Function, addDictionariesToGit: Function, removeDictionariesToGit: Function, getLanguagesFromRepository: Function, updatePackageVersion: Function, initRepo: Function}}
  */
 module.exports = function (config) {
@@ -89,9 +108,32 @@ module.exports = function (config) {
             return gitCommand('commit', message);
         },
         updatePackageVersion: function (langs) {
-            return gitCommand('commit', 'update dictionaries')
+            return gitCommand('tags')
+                .then(function (tags) {
+                    var compactTags = _.compact(tags.all);
+                    var latestTag = compactTags[compactTags.length - 1];
+                    var split = latestTag.split('.');
+                    split[1] = parseInt(split[1]) + 1;
+                    return split.join('.');
+                })
+                .then(updatePackageJson)
+                .then(function (version) {
+                    return gitCommand('add', ['package.json'])
+                        .then(function () {
+                            return gitCommand('commit', 'update dictionaries')
+                        })
+                        .then(function () {
+                            return version;
+                        });
+                })
+                .then(function (version) {
+                    return gitCommand('addTag', version);
+                })
                 .then(function () {
-                    return gitCommand('push', gitubUrl, 'master');
+                    return Promise.all([
+                        gitCommand('push', gitubUrl, 'master'),
+                        gitCommand('pushTags', gitubUrl)
+                    ]);
                 });
         }
     };
