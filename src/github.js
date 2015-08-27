@@ -37,7 +37,7 @@ var writeDictionary = function (dict) {
         });
     });
 };
-var updatePackageJson = function (version) {
+var updatePackageJson = function () {
     return new Promise(function (resolve, reject) {
         var path = pathToLocalRepo + '/package.json';
         fs.readFile(path, function (err, buffer) {
@@ -45,6 +45,10 @@ var updatePackageJson = function (version) {
                 reject(err);
             } else {
                 var config = JSON.parse(buffer.toString());
+                var split = config.version.split('.');
+                split[1] = parseInt(split[1]) + 1;
+                split[2] = 0;
+                var version = split.join('.');
                 config.version = version;
                 fs.writeFile(path, JSON.stringify(config, null, 2), function (err) {
                     if (err) {
@@ -107,33 +111,24 @@ module.exports = function (config) {
         commit: function (message) {
             return gitCommand('commit', message);
         },
-        updatePackageVersion: function (langs) {
-            return gitCommand('tags')
-                .then(function (tags) {
-                    var compactTags = _.compact(tags.all);
-                    var latestTag = compactTags[compactTags.length - 1];
-                    var split = latestTag.split('.');
-                    split[1] = parseInt(split[1]) + 1;
-                    return split.join('.');
-                })
-                .then(updatePackageJson)
+        updatePackageVersion: function () {
+            return updatePackageJson()
                 .then(function (version) {
                     return gitCommand('add', ['package.json'])
                         .then(function () {
-                            return gitCommand('commit', 'update dictionaries')
+                            return gitCommand('commit', 'update dictionaries to version ' + version)
                         })
                         .then(function () {
-                            return version;
+                            return gitCommand('addTag', version)
+                        })
+                        .then(function () {
+                            return Promise.all([
+                                gitCommand('push', gitubUrl, 'master'),
+                                gitCommand('pushTags', gitubUrl)
+                            ])
+                        }).then(function () {
+                            return 'Version of dictionaries was updated to ' + version;
                         });
-                })
-                .then(function (version) {
-                    return gitCommand('addTag', version);
-                })
-                .then(function () {
-                    return Promise.all([
-                        gitCommand('push', gitubUrl, 'master'),
-                        gitCommand('pushTags', gitubUrl)
-                    ]);
                 });
         }
     };

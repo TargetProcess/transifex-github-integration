@@ -24,6 +24,6 @@
   "dependencies": {
     "lodash": "3.10.1",
     "simple-git": "1.8.0",
-    "tau-transifex": "0.0.2"
+    "tau-transifex": "0.2.0"
   }
 }
