@@ -8,6 +8,7 @@
    "github": {
            "username": "username",
            "apiToken": "token",
-           "repo":"repo"
+           "repo":"repo",
+           "pathToLocalRepo":"tmp_repo"
    }
  };

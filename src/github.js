@@ -1,73 +1,77 @@
 var _ = require('lodash');
 var fs = require('fs');
-var pathToLocalRepo = 'tmp_repo';
-var git = require('simple-git')(pathToLocalRepo);
-var isClone = true;
-if (!fs.existsSync(pathToLocalRepo)) {
-    fs.mkdirSync(pathToLocalRepo);
-    isClone = false;
-}
-var gitCommand = function (command) {
-    var params = _.toArray(arguments).slice(1);
-    return new Promise(function (resolve, reject) {
-        var callback = function (err, res) {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(res);
-            }
-        };
-        git[command].apply(git, params.concat(callback));
-    });
-};
-var writeDictionary = function (dict) {
-    var dir = `dict/${dict.lang}`;
-    var repoDir = `${pathToLocalRepo}/${dir}`;
-    if (!fs.existsSync(repoDir)) {
-        fs.mkdirSync(repoDir);
-    }
-    var path = `${dir}/${dict.lang}.json`;
-    return new Promise(function (resolve, reject) {
-        fs.writeFile(`${pathToLocalRepo}/${path}`, dict.content, function (err) {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(path);
-            }
-        });
-    });
-};
-var updatePackageJson = function () {
-    return new Promise(function (resolve, reject) {
-        var path = pathToLocalRepo + '/package.json';
-        fs.readFile(path, function (err, buffer) {
-            if (err) {
-                reject(err);
-            } else {
-                var config = JSON.parse(buffer.toString());
-                var split = config.version.split('.');
-                split[1] = parseInt(split[1]) + 1;
-                split[2] = 0;
-                var version = split.join('.');
-                config.version = version;
-                fs.writeFile(path, JSON.stringify(config, null, 2), function (err) {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve(version);
-                    }
-                })
-            }
-        })
-    });
-};
+
 /**
  *
- * @param {{username:String, password:String, repo: String}} config
+ * @param {{username:String, password:String, repo: String, pathToLocalRepo:String}} config
  * @return {{initRepo: Function, addDictionariesToGit: Function, removeDictionariesToGit: Function, getLanguagesFromRepository: Function, updatePackageVersion: Function, initRepo: Function}}
  */
 module.exports = function (config) {
     var gitubUrl = `https://${config.username}:${config.password}@github.com/${config.repo}.git`;
+    var pathToLocalRepo = config.pathToLocalRepo || 'tmp_repo';
+    var git = require('simple-git')(pathToLocalRepo);
+    var isClone = true;
+    if (!fs.existsSync(pathToLocalRepo)) {
+        fs.mkdirSync(pathToLocalRepo);
+        isClone = false;
+    }
+
+    var gitCommand = function (command) {
+        var params = _.toArray(arguments).slice(1);
+        return new Promise(function (resolve, reject) {
+            var callback = function (err, res) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(res);
+                }
+            };
+            git[command].apply(git, params.concat(callback));
+        });
+    };
+
+    var updatePackageJson = function () {
+        return new Promise(function (resolve, reject) {
+            var path = pathToLocalRepo + '/package.json';
+            fs.readFile(path, function (err, buffer) {
+                if (err) {
+                    reject(err);
+                } else {
+                    var config = JSON.parse(buffer.toString());
+                    var split = config.version.split('.');
+                    split[1] = parseInt(split[1]) + 1;
+                    split[2] = 0;
+                    var version = split.join('.');
+                    config.version = version;
+                    fs.writeFile(path, JSON.stringify(config, null, 2), function (err) {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(version);
+                        }
+                    })
+                }
+            })
+        });
+    };
+
+    var writeDictionary = function (dict) {
+        var dir = `dict/${dict.lang}`;
+        var repoDir = `${pathToLocalRepo}/${dir}`;
+        if (!fs.existsSync(repoDir)) {
+            fs.mkdirSync(repoDir);
+        }
+        var path = `${dir}/${dict.lang}.json`;
+        return new Promise(function (resolve, reject) {
+            fs.writeFile(`${pathToLocalRepo}/${path}`, dict.content, function (err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(path);
+                }
+            });
+        });
+    };
     return {
         initRepo: function () {
             var result;
