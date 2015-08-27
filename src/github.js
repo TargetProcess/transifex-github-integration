@@ -92,6 +92,19 @@ module.exports = function (config) {
                 return gitCommand('add', files);
             });
         },
+        addLanguagesInfoToGit: function (info) {
+            return new Promise(function (resolve, reject) {
+                fs.writeFile(`${pathToLocalRepo}/languages.json`, JSON.stringify(info, null, 2), function (err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve('languages.json');
+                    }
+                });
+            }).then(function (file) {
+                    return gitCommand('add', [file]);
+                });
+        },
         removeDictionariesToGit: function (dictionaries) {
             return dictionaries.map(function (dict) {
                 return gitCommand('rm', `dict/${dict}/${dict}.json`);
