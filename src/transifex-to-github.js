@@ -2,35 +2,48 @@ var _ = require('lodash');
 var git = require('./github');
 var transifex = require('tau-transifex');
 
+var retrieveTransifexTranslations = (transifexApi) => {
+    return Promise
+        .all([
+            transifexApi.getProjectLanguages(),
+            transifexApi.getLanguagesInfo()
+        ])
+        .then(([projectLanguages, allLanguagesInfo]) => Promise.all(projectLanguages.map(language => {
+            var languageInfo = _.find(allLanguagesInfo, i => i.code === language.code) || {name: language.code};
+
+            return Promise
+                .all([
+                    transifexApi.getTranslationStats(language.code),
+                    transifexApi.getTranslatedResource(language.code)
+                ])
+                .then(([stats, resource]) => ({
+                    languageCode: language.code,
+                    name: languageInfo.name,
+                    stats,
+                    resource
+                }));
+        })));
+};
+
 module.exports = function (config) {
     var gitRepo = git(config.github);
-    var getTranslatedResources = transifex(config.transifex).getTranslatedResources;
-    var getLanguagesInfo = transifex(config.transifex).getLanguagesInfo;
-    return gitRepo.initRepo()
+    var transifexApi = transifex(config.transifex);
+    var getRepositoryLanguages = gitRepo
+        .initRepo()
+        .then(() => gitRepo.getLanguagesFromRepository());
+    return Promise.all([retrieveTransifexTranslations(transifexApi), getRepositoryLanguages])
+        .then(function ([translations, languagesInGit]) {
+            var missingLanguages = _.difference(languagesInGit, _.pluck(translations, 'languageCode'));
+            var languagesInfo = translations.map(({languageCode, name, stats}) => ({
+                code: languageCode,
+                name,
+                stats
+            }));
+            return [gitRepo.addLanguagesInfoToGit(languagesInfo)]
+                .concat(missingLanguages.map(l => gitRepo.removeLanguageFromGit(l)))
+                .concat(translations.map(({languageCode, resource}) => gitRepo.addDictionaryToGit(languageCode, resource)));
+        })
         .then(function () {
-            return Promise.all([getTranslatedResources(), gitRepo.getLanguagesFromRepository(), getLanguagesInfo()])
-        })
-        .then(function (res) {
-            var dictionaryFromTransifex = res[0];
-            var dictionaryFromGitRepository = res[1];
-            var languagesInfo = res[2];
-            return {
-                add: dictionaryFromTransifex,
-                remove: _.difference(dictionaryFromGitRepository, _.pluck(dictionaryFromTransifex, 'lang')),
-                languagesInfo: languagesInfo.filter(function (lang) {
-                    return _.contains(_.pluck(dictionaryFromTransifex, 'lang'), lang.code)
-                })
-            };
-        })
-        .then(function (files) {
-            return Promise.all(
-                _.flatten([
-                    gitRepo.addDictionariesToGit(files.add),
-                    gitRepo.removeDictionariesToGit(files.remove),
-                    gitRepo.addLanguagesInfoToGit(files.languagesInfo),
-                ])
-            );
-        }).then(function () {
             return gitRepo.getStatus();
         })
         .then(function (status) {
