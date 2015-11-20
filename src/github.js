@@ -4,7 +4,7 @@ var fs = require('fs');
 /**
  *
  * @param {{username:String, password:String, repo: String, pathToLocalRepo:String}} config
- * @return {{initRepo: Function, addDictionariesToGit: Function, removeDictionariesToGit: Function, getLanguagesFromRepository: Function, updatePackageVersion: Function, initRepo: Function}}
+ * @return {{initRepo: Function, addDictionaryToGit: Function, removeDictionaryFromGit: Function, getLanguagesFromRepository: Function, updatePackageVersion: Function, initRepo: Function}}
  */
 module.exports = function (config) {
     var gitubUrl = `https://${config.username}:${config.password}@github.com/${config.repo}.git`;
@@ -55,15 +55,15 @@ module.exports = function (config) {
         });
     };
 
-    var writeDictionary = function (dict) {
-        var dir = `dict/${dict.lang}`;
+    var writeDictionary = function (languageCode, content) {
+        var dir = `dict/${languageCode}`;
         var repoDir = `${pathToLocalRepo}/${dir}`;
         if (!fs.existsSync(repoDir)) {
             fs.mkdirSync(repoDir);
         }
-        var path = `${dir}/${dict.lang}.json`;
+        var path = `${dir}/${languageCode}.json`;
         return new Promise(function (resolve, reject) {
-            fs.writeFile(`${pathToLocalRepo}/${path}`, dict.content, function (err) {
+            fs.writeFile(`${pathToLocalRepo}/${path}`, content, function (err) {
                 if (err) {
                     reject(err);
                 } else {
@@ -87,11 +87,18 @@ module.exports = function (config) {
                 return git;
             })
         },
-        addDictionariesToGit: function (dictionaries) {
-            return Promise.all(dictionaries.map(writeDictionary)).then(function (files) {
-                return gitCommand('add', files);
-            });
+
+        addDictionaryToGit: function (languageCode, content) {
+            return writeDictionary(languageCode, content)
+                .then(function (files) {
+                    return gitCommand('add', files);
+                });
         },
+
+        removeLanguageFromGit: function (languageCode) {
+            return gitCommand('rm', `dict/${languageCode}/${languageCode}.json`);
+        },
+
         addLanguagesInfoToGit: function (info) {
             return new Promise(function (resolve, reject) {
                 fs.writeFile(`${pathToLocalRepo}/languages.json`, JSON.stringify(info, null, 2), function (err) {
@@ -105,11 +112,8 @@ module.exports = function (config) {
                     return gitCommand('add', [file]);
                 });
         },
-        removeDictionariesToGit: function (dictionaries) {
-            return dictionaries.map(function (dict) {
-                return gitCommand('rm', `dict/${dict}/${dict}.json`);
-            });
-        },
+
+
         getLanguagesFromRepository: function () {
             return new Promise(function (resolve, reject) {
                 fs.readdir(`${pathToLocalRepo}/dict/`, function (err, stats) {
