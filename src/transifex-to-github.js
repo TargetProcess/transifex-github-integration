@@ -40,7 +40,7 @@ module.exports = function (config) {
                 stats
             }));
             return [gitRepo.addLanguagesInfoToGit(languagesInfo)]
-                .concat(missingLanguages.map(l => gitRepo.removeLanguageFromGit(l)))
+                .concat(missingLanguages.map(x => gitRepo.removeLanguageFromGit(x)))
                 .concat(translations.map(({languageCode, resource}) => gitRepo.addDictionaryToGit(languageCode, resource)));
         })
         .then(function () {
