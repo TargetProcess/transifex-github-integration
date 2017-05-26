@@ -67,11 +67,14 @@ module.exports = function (config) {
         });
     };
 
-    var writeDictionary = function (languageCode, content) {
-        var langDir = `dict/${languageCode}`;
-        mkdirIfNotExists(`${pathToLocalRepo}/${langDir}`);
+    var pathToDictionaries = `${pathToLocalRepo}/dict`;
+    var getLanguageFileName = languageCode => `dict/${languageCode}/${languageCode}.json`;
 
-        var path = `${langDir}/${languageCode}.json`;
+    var writeDictionary = function (languageCode, content) {
+        mkdirIfNotExists(pathToDictionaries);
+        mkdirIfNotExists(`${pathToDictionaries}/${languageCode}`);
+
+        var path = getLanguageFileName(languageCode);
         return new Promise(function (resolve, reject) {
             fs.writeFile(`${pathToLocalRepo}/${path}`, content, function (err) {
                 if (err) {
@@ -89,9 +92,7 @@ module.exports = function (config) {
                 gitCommand('fetch', githubUrl).then(() => gitCommand('pull')) :
                 gitCommand('clone', githubUrl, '.');
 
-            return cloneOrUpdateRepo.then(function () {
-                return git;
-            });
+            return cloneOrUpdateRepo.then(() => git);
         },
 
         addDictionaryToGit: function (languageCode, content) {
@@ -99,7 +100,7 @@ module.exports = function (config) {
         },
 
         removeLanguageFromGit: function (languageCode) {
-            return gitCommand('rm', `dict/${languageCode}/${languageCode}.json`);
+            return gitCommand('rm', getLanguageFileName(languageCode));
         },
 
         addLanguagesInfoToGit: function (info) {
@@ -115,8 +116,9 @@ module.exports = function (config) {
         },
 
         getLanguagesFromRepository: function () {
+            mkdirIfNotExists(pathToDictionaries);
             return new Promise(function (resolve, reject) {
-                fs.readdir(`${pathToLocalRepo}/dict/`, function (err, stats) {
+                fs.readdir(`${pathToDictionaries}/`, function (err, stats) {
                     if (err) {
                         reject(err);
                     } else {
