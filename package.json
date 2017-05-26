@@ -1,7 +1,7 @@
 {
   "name": "transifex-github-integration",
   "version": "0.3.0",
-  "description": "integration transifex with github",
+  "description": "Update languages/dictionaries in GitHub repo from Transifex",
   "main": "src/transifex-to-github.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -18,9 +18,9 @@
   "author": "Targetprocess",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/TargetProcess/transifex-github-integaration/issues"
+    "url": "https://github.com/TargetProcess/transifex-github-integration/issues"
   },
-  "homepage": "https://github.com/TargetProcess/transifex-github-integaration#readme",
+  "homepage": "https://github.com/TargetProcess/transifex-github-integration#readme",
   "dependencies": {
     "lodash": "3.10.1",
     "simple-git": "1.8.0",
