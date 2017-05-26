@@ -1,6 +1,6 @@
 {
   "name": "transifex-github-integration",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Update languages/dictionaries in GitHub repo from Transifex",
   "main": "src/transifex-to-github.js",
   "scripts": {
