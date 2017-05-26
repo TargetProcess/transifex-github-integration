@@ -2,18 +2,26 @@ var _ = require('lodash');
 var fs = require('fs');
 
 /**
- *
- * @param {{username:String, password:String, repo: String, pathToLocalRepo:String}} config
- * @return {{initRepo: Function, addDictionaryToGit: Function, removeDictionaryFromGit: Function, getLanguagesFromRepository: Function, updatePackageVersion: Function, initRepo: Function}}
+ * @param {{username: String, password: String, repo: String, pathToLocalRepo: String}} config
+ * @returns {{initRepo, addDictionaryToGit, removeLanguageFromGit, addLanguagesInfoToGit, getLanguagesFromRepository, getStatus, commit, updatePackageVersion}}
  */
 module.exports = function (config) {
-    var gitubUrl = `https://${config.username}:${config.password}@github.com/${config.repo}.git`;
+    var githubUrl = `https://${config.username}:${config.password}@github.com/${config.repo}.git`;
     var pathToLocalRepo = config.pathToLocalRepo || 'tmp_repo';
     var git = require('simple-git')(pathToLocalRepo);
-    var isClone = true;
-    if (!fs.existsSync(pathToLocalRepo)) {
-        fs.mkdirSync(pathToLocalRepo);
-        isClone = false;
+
+    var mkdirIfNotExists = function (path) {
+        if (!fs.existsSync(path)) {
+            fs.mkdirSync(path);
+            return true;
+        }
+
+        return false;
+    };
+
+    var isAlreadyCloned = true;
+    if (mkdirIfNotExists(pathToLocalRepo)) {
+        isAlreadyCloned = false;
     }
 
     var gitCommand = function (command) {
@@ -30,9 +38,13 @@ module.exports = function (config) {
         });
     };
 
+    var gitAdd = files => gitCommand('add', files);
+
+    var gitCommit = message => gitCommand('commit', message);
+
     var updatePackageJson = function () {
         return new Promise(function (resolve, reject) {
-            var path = pathToLocalRepo + '/package.json';
+            var path = `${pathToLocalRepo}/package.json`;
             fs.readFile(path, function (err, buffer) {
                 if (err) {
                     reject(err);
@@ -49,19 +61,20 @@ module.exports = function (config) {
                         } else {
                             resolve(version);
                         }
-                    })
+                    });
                 }
-            })
+            });
         });
     };
 
+    var pathToDictionaries = `${pathToLocalRepo}/dict`;
+    var getLanguageFileName = languageCode => `dict/${languageCode}/${languageCode}.json`;
+
     var writeDictionary = function (languageCode, content) {
-        var dir = `dict/${languageCode}`;
-        var repoDir = `${pathToLocalRepo}/${dir}`;
-        if (!fs.existsSync(repoDir)) {
-            fs.mkdirSync(repoDir);
-        }
-        var path = `${dir}/${languageCode}.json`;
+        mkdirIfNotExists(pathToDictionaries);
+        mkdirIfNotExists(`${pathToDictionaries}/${languageCode}`);
+
+        var path = getLanguageFileName(languageCode);
         return new Promise(function (resolve, reject) {
             fs.writeFile(`${pathToLocalRepo}/${path}`, content, function (err) {
                 if (err) {
@@ -72,31 +85,22 @@ module.exports = function (config) {
             });
         });
     };
+
     return {
         initRepo: function () {
-            var result;
-            if (isClone) {
-                result = gitCommand('fetch', gitubUrl).then(function () {
-                    return gitCommand('pull');
-                });
-            } else {
-                result = gitCommand('clone', gitubUrl, '.');
-            }
+            var cloneOrUpdateRepo = isAlreadyCloned ?
+                gitCommand('fetch', githubUrl).then(() => gitCommand('pull')) :
+                gitCommand('clone', githubUrl, '.');
 
-            return result.then(function () {
-                return git;
-            })
+            return cloneOrUpdateRepo.then(() => git);
         },
 
         addDictionaryToGit: function (languageCode, content) {
-            return writeDictionary(languageCode, content)
-                .then(function (files) {
-                    return gitCommand('add', files);
-                });
+            return writeDictionary(languageCode, content).then(files => gitAdd(files));
         },
 
         removeLanguageFromGit: function (languageCode) {
-            return gitCommand('rm', `dict/${languageCode}/${languageCode}.json`);
+            return gitCommand('rm', getLanguageFileName(languageCode));
         },
 
         addLanguagesInfoToGit: function (info) {
@@ -108,49 +112,44 @@ module.exports = function (config) {
                         resolve('languages.json');
                     }
                 });
-            }).then(function (file) {
-                    return gitCommand('add', [file]);
-                });
+            }).then(file => gitAdd([file]));
         },
 
-
         getLanguagesFromRepository: function () {
+            mkdirIfNotExists(pathToDictionaries);
             return new Promise(function (resolve, reject) {
-                fs.readdir(`${pathToLocalRepo}/dict/`, function (err, stats) {
+                fs.readdir(`${pathToDictionaries}/`, function (err, stats) {
                     if (err) {
                         reject(err);
                     } else {
                         resolve(stats);
                     }
-                })
+                });
             });
-
         },
+
         getStatus: function () {
             return gitCommand('status');
         },
-        commit: function (message) {
-            return gitCommand('commit', message);
-        },
+
+        commit: gitCommit,
+
         updatePackageVersion: function () {
+            var version;
             return updatePackageJson()
-                .then(function (version) {
-                    return gitCommand('add', ['package.json'])
-                        .then(function () {
-                            return gitCommand('commit', 'update dictionaries to version ' + version)
-                        })
-                        .then(function () {
-                            return gitCommand('addTag', version)
-                        })
-                        .then(function () {
-                            return Promise.all([
-                                gitCommand('push', gitubUrl, 'master'),
-                                gitCommand('pushTags', gitubUrl)
-                            ])
-                        }).then(function () {
-                            return 'Version of dictionaries was updated to ' + version;
-                        });
-                });
+                .then(updatedVersion => {
+                    version = updatedVersion;
+                    return gitAdd(['package.json']);
+                })
+                .then(() => gitCommit(`Update dictionaries to version ${version}`))
+                .then(() => gitCommand('addTag', version))
+                .then(function () {
+                    return Promise.all([
+                        gitCommand('push', githubUrl, 'master'),
+                        gitCommand('pushTags', githubUrl)
+                    ]);
+                })
+                .then(() => `Updated dictionaries to version ${version}`);
         }
     };
 };
