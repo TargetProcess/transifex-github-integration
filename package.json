@@ -1,6 +1,6 @@
 {
   "name": "transifex-github-integration",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Update languages/dictionaries in GitHub repo from Transifex",
   "main": "src/transifex-to-github.js",
   "scripts": {
@@ -24,6 +24,6 @@
   "dependencies": {
     "lodash": "3.10.1",
     "simple-git": "1.8.0",
-    "tau-transifex": "0.10.0"
+    "tau-transifex": "0.10.2"
   }
 }
